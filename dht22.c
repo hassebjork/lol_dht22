@@ -24,7 +24,7 @@ static uint8_t sizecvt( const int read ) {
  < 256. However, they are returned as int() types. This is a safety function */
 
 	if ( read > 255 || read < 0 ) {
-		printf( "Invalid data from wiringPi library\n" );
+		fprintf( stderr, "Invalid data from wiringPi library\n" );
 		exit( EXIT_FAILURE );
 	}
 	return ( uint8_t )read;
@@ -84,17 +84,17 @@ static int read_dht22_dat() {
 			t /= 10.0;
 			if ( (dht22_dat[2] & 0x80 ) != 0 ) t *= -1;
 
-
-		printf( "Humidity    = %.1f%% \nTemperature = %.1f*C \n", h, t );
+		printf( "Temperature: %.1f*C \tHumidity: %.1f%%\n", t, h );
 		return 1;
 	} else {
-		printf( "Data not good, skip\n" );
+		fprintf( stderr, "Data invalid\n" );
 		return 0;
 	}
 }
 
 int main ( int argc, char *argv[] ) {
 	int lockfd;
+	uint8_t rErr = 0;
 
 	if ( argc != 2 )
 		printf ( "%s <pin>\n    pin : wiringPi pin No (default %d)\n",argv[0], DHTPIN );
@@ -111,11 +111,11 @@ int main ( int argc, char *argv[] ) {
 		exit( EXIT_FAILURE );
 	}
 
-	while ( read_dht22_dat() == 0 ) {
+	while ( read_dht22_dat() == 0 && rErr++ < 10 ) {
 		delay( 1000 ); // wait 1sec to refresh
 	}
 
-	delay( 1500 );
+	delay( 1500 );	// No retry within 1 sec
 	close_lockfile( lockfd );
 
 	return 0 ;
