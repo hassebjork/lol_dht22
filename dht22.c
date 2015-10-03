@@ -16,7 +16,7 @@
 #include "locking.h"
 
 #define MAXTIMINGS 85
-static int DHTPIN = 7;
+static int DHTPIN = 5;
 static int dht22_dat[5] = { 0, 0, 0, 0, 0 };
 
 static uint8_t sizecvt( const int read ) {
@@ -85,7 +85,7 @@ static int read_dht22_dat() {
 			if ( (dht22_dat[2] & 0x80 ) != 0 ) t *= -1;
 
 
-		printf( "Humidity = %.2f %% Temperature = %.2f *C \n", h, t );
+		printf( "Humidity    = %.1f%% \nTemperature = %.1f*C \n", h, t );
 		return 1;
 	} else {
 		printf( "Data not good, skip\n" );
@@ -97,13 +97,10 @@ int main ( int argc, char *argv[] ) {
 	int lockfd;
 
 	if ( argc != 2 )
-		printf ( "usage: %s <pin>\ndescription: pin is the wiringPi pin number\nusing 7 ( GPIO 4 )\n",argv[0] );
+		printf ( "%s <pin>\n    pin : wiringPi pin No (default %d)\n",argv[0], DHTPIN );
 	else
 		DHTPIN = atoi( argv[1] );
 	
-
-	printf ( "Raspberry Pi wiringPi DHT22 reader\nwww.lolware.net\n" ) ;
-
 	lockfd = open_lockfile( LOCKFILE );
 
 	if ( wiringPiSetup () == -1 )
