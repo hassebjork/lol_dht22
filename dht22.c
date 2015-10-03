@@ -15,7 +15,7 @@
 
 #include "locking.h"
 
-#define MAXTIMINGS 85
+#define MAXTIMINGS 82
 static int DHTPIN = 5;
 static int dht22_dat[5] = { 0, 0, 0, 0, 0 };
 
@@ -27,67 +27,79 @@ static uint8_t sizecvt( const int read ) {
 		fprintf( stderr, "Invalid data from wiringPi library\n" );
 		exit( EXIT_FAILURE );
 	}
-	return ( uint8_t )read;
+	return ( uint8_t ) read;
 }
 
 static int read_dht22_dat() {
-	uint8_t laststate = HIGH;
+	uint8_t laststate = LOW;
 	uint8_t counter = 0;
-	uint8_t j = 0, i;
+	uint8_t j = 0, i, ref, max = 255;
+	float t, h;
 
 	dht22_dat[0] = dht22_dat[1] = dht22_dat[2] = dht22_dat[3] = dht22_dat[4] = 0;
-
-	// pull pin down for 18 milliseconds
+	
+	// Prepare to send start signal
 	pinMode( DHTPIN, OUTPUT );
 	digitalWrite( DHTPIN, HIGH );
-	delay( 10 );
+	delay( 100 );				// Simulate pull-up resistor
+	
+	// Send start signal
 	digitalWrite( DHTPIN, LOW );
-	delay( 18 );
-	// then pull it up for 40 microseconds
+	delay( 10 );				// 1-10 ms
 	digitalWrite( DHTPIN, HIGH );
-	delayMicroseconds( 40 ); 
-	// prepare to read the pin
+	delayMicroseconds( 20 );	// 20-40 us
+	
+	// Prepare to read
 	pinMode( DHTPIN, INPUT );
 
-	// detect change and read data
+	// Detect change and read data
 	for ( i = 0; i < MAXTIMINGS; i++ ) {
 		counter = 0;
 		while ( sizecvt( digitalRead( DHTPIN ) ) == laststate ) {
-			counter++;
-			delayMicroseconds( 1 );
-			if ( counter == 255 ) {
+			delayMicroseconds( 4 );
+			if ( ++counter > max ) {
 				break;
 			}
 		}
 		laststate = sizecvt( digitalRead( DHTPIN ) );
-
 		if ( counter == 255 ) break;
-
-		// ignore first 3 transitions
-		if ( ( i >= 4 ) && ( i%2 == 0 ) ) {
-			// shove each bit into the storage bytes
-			dht22_dat[j/8] <<= 1;
-			if ( counter > 16 )
-				dht22_dat[j/8] |= 1;
-			j++;
+		
+		// Signal HIGH 
+		if ( i%2 == 1 ) {
+			
+			// Data bit
+			if ( i > 2 ) {
+				dht22_dat[j/8] <<= 1;
+				if ( counter >= ref )
+					dht22_dat[j/8] |= 1;
+				j++;
+				
+			// Reference signal 80us
+			} else if ( i == 2 ) {
+				max = counter;
+			}
+			
+		// Signal LOW - 50us reference
+		} else {
+			ref = counter;
 		}
 	}
-
-	// check we read 40 bits ( 8bit x 5 ) + verify checksum in the last byte
-	// print it out if data is good
-	if ( (j >= 40 ) && 
-		( dht22_dat[4] == ( (dht22_dat[0] + dht22_dat[1] + dht22_dat[2] + dht22_dat[3] ) & 0xFF ) ) ) {
-			float t, h;
-			h = ( float )dht22_dat[0] * 256 + ( float )dht22_dat[1];
-			h /= 10;
-			t = ( float )( dht22_dat[2] & 0x7F )* 256 + ( float )dht22_dat[3];
-			t /= 10.0;
-			if ( (dht22_dat[2] & 0x80 ) != 0 ) t *= -1;
-
+	
+	// Calculate checksum, humidity and temperature
+	i = ( ( dht22_dat[0] + dht22_dat[1] + dht22_dat[2] + dht22_dat[3] ) & 0xFF );
+	h = ( ( int ) dht22_dat[0] * 256 + ( int ) dht22_dat[1] ) / 10.0;
+	t = ( ( int )( dht22_dat[2] & 0x7F ) * 256 + ( int ) dht22_dat[3] ) / 10.0;
+	if ( (dht22_dat[2] & 0x80 ) != 0 ) t *= -1;
+	
+	// Data OK! 40 bits + checksum
+	if ( (j >= 40 ) && ( dht22_dat[4] == i ) ) {
 		printf( "Temperature: %.1f*C \tHumidity: %.1f%%\n", t, h );
 		return 1;
+		
+	// Error
 	} else {
-		fprintf( stderr, "Data invalid\n" );
+		fprintf( stderr, "Invalid data: %d bits [%02x %02x %02x %02x %02x] Chk=%02x T:%.1f H:%.1f\n", 
+			j, dht22_dat[0], dht22_dat[1], dht22_dat[2], dht22_dat[3], dht22_dat[4], i, t, h );
 		return 0;
 	}
 }
